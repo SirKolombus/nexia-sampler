@@ -24,7 +24,11 @@ let task6Seed = null;
 
 // Import FS_PARAMETRY (in-code mapping of combinations to numeric factor)
 import fsParams from './FS_Parametry';
-const BATCH_SIZE = 5000;
+
+// Optimalized batch size for large datasets
+const BATCH_SIZE = 2000; // Reduced from 5000 for better memory management
+const LARGE_DATASET_THRESHOLD = 50000; // Warn user for datasets larger than this
+const MEMORY_CRITICAL_THRESHOLD = 200000; // Extra precautions for very large datasets
 
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
@@ -884,7 +888,7 @@ function columnIndexToLetter(index) {
   return letter;
 }
 
-// Hlavní funkce pro generování vzorku
+// Hlavní funkce pro generování vzorku - optimalizovaná verze
 async function generateSample() {
   try {
     const method = document.getElementById("sampling-method").value;
@@ -892,7 +896,7 @@ async function generateSample() {
     const valueColumn = document.getElementById("value-column").value;
     
     if (!dataRange || !valueColumn) {
-  showNotification("Prosím vyplňte všechna povinná pole.");
+      showNotification("Prosím vyplňte všechna povinná pole.");
       return;
     }
     
@@ -915,36 +919,59 @@ async function generateSample() {
         showNotification("Zadaný sloupec není v rámci vybraného rozsahu dat.");
         return;
       }
-      
-      let data = [];
-      let batchNum = 0;
-      for await (const { values } of readRangeInBatches(context, worksheet, range, BATCH_SIZE)) {
-        batchNum++;
-        showNotification(`Zpracovává se dávka ${batchNum}...`);
-        if (data.length === 0) {
-          data.push(values[0]); // Add header row
-        }
-        data = data.concat(values.slice(1));
-      }
 
-      // Generování vzorku podle zvolené metody
+      const totalRows = range.rowCount - 1; // Exclude header row
+      
+      // Memory safety checks
+      if (totalRows > MEMORY_CRITICAL_THRESHOLD) {
+        const confirmed = confirm(
+          `Varování: Dataset obsahuje ${totalRows.toLocaleString()} řádků. ` +
+          `To je velmi velký dataset, který může způsobit problémy s pamětí. ` +
+          `Doporučujeme rozdělit data na menší části. Pokračovat?`
+        );
+        if (!confirmed) {
+          showNotification("Operace zrušena uživatelem.");
+          return;
+        }
+      } else if (totalRows > LARGE_DATASET_THRESHOLD) {
+        showNotification(
+          `Info: Dataset obsahuje ${totalRows.toLocaleString()} řádků. ` +
+          `Zpracování může trvat déle. Prosím čekejte...`
+        );
+      }
+      
+      showNotification(`Začíná zpracování ${totalRows.toLocaleString()} řádků...`);
+      
+      // Generování vzorku podle zvolené metody pomocí streaming algoritmu
       let sample;
       if (method === "monetary-random-walk") {
-        sample = generateMonetaryRandomWalk(data, relColIndex);
+        sample = await generateMonetaryRandomWalkStreaming(context, worksheet, range, relColIndex, totalRows);
       } else {
-        sample = generateRandomNumberSample(data, relColIndex);
+        sample = await generateRandomNumberSampleStreaming(context, worksheet, range, relColIndex, totalRows);
       }
       
       // Zobrazení výsledků
-      displayResults(sample, data.length);
+      displayResults(sample, totalRows + 1); // +1 for header
       
       // Zvýraznění vybraných řádků
       await highlightSampleRows(context, worksheet, dataRange, sample);
       
+      showNotification(`Vzorkování dokončeno! Vybráno ${sample.length} vzorků z ${totalRows.toLocaleString()} řádků.`);
     });
   } catch (error) {
     console.error("Chyba při generování vzorku:", error);
-  showNotification("Chyba při generování vzorku: " + (error && error.message ? error.message : '')); 
+    
+    // Better error messages for common issues
+    let errorMessage = "Chyba při generování vzorku: ";
+    if (error.message && error.message.includes("memory")) {
+      errorMessage += "Nedostatek paměti. Zkuste rozdělit data na menší části.";
+    } else if (error.message && error.message.includes("timeout")) {
+      errorMessage += "Operace trvala příliš dlouho. Zkuste menší dataset.";
+    } else {
+      errorMessage += (error && error.message ? error.message : 'Neznámá chyba');
+    }
+    
+    showNotification(errorMessage, 8000); // Longer display for errors
   }
 }
 
@@ -971,80 +998,176 @@ function getColumnIndex(columnRef) {
    }
  }
 
- // Helper to read rows in batches (default batch size = BATCH_SIZE)
+ // Helper to read rows in batches with improved memory management
  async function* readRangeInBatches(context, worksheet, range, batchSize = BATCH_SIZE) {
    const totalRows = range.rowCount;
    const startRow = range.rowIndex;
    const startCol = range.columnIndex;
    const colCount = range.columnCount;
+   
+   // Memory warning for very large datasets
+   if (totalRows > 50000) {
+     showNotification(`Upozornění: Zpracovává se ${totalRows.toLocaleString()} řádků. Prosím čekejte...`);
+   }
+   
    for (let offset = 0; offset < totalRows; offset += batchSize) {
      const rows = Math.min(batchSize, totalRows - offset);
-     const subRange = worksheet.getRangeByIndexes(startRow + offset, startCol, rows, colCount);
-     subRange.load('values');
-     await context.sync();
-     yield { values: subRange.values, startRow: startRow + offset };
+     
+     try {
+       const subRange = worksheet.getRangeByIndexes(startRow + offset, startCol, rows, colCount);
+       subRange.load('values');
+       await context.sync();
+       
+       yield { values: subRange.values, startRow: startRow + offset };
+       
+       // Force garbage collection hint for large datasets
+       if (totalRows > 100000 && offset % (batchSize * 10) === 0) {
+         showNotification(`Zpracováno ${Math.round((offset / totalRows) * 100)}% - ${(offset + rows).toLocaleString()}/${totalRows.toLocaleString()} řádků...`);
+         // Give browser a chance to garbage collect
+         await new Promise(resolve => setTimeout(resolve, 10));
+       }
+     } catch (error) {
+       console.error(`Chyba při čtení dávky na pozici ${offset}:`, error);
+       throw new Error(`Chyba při čtení dat na řádku ${startRow + offset}: ${error.message}`);
+     }
    }
  }
 
 
-// Implementace náhodné peněžní procházky
-function generateMonetaryRandomWalk(data, columnIndex) {
-  const totalValue = data.slice(1).reduce((sum, row) => {
-    const raw = row[columnIndex];
-    const parsed = parseNumberLoose(raw);
-    const value = parsed !== null ? parsed : 0;
-    return sum + Math.abs(value);
-  }, 0);
+// Optimalizovaná implementace náhodné peněžní procházky - streaming verze
+async function generateMonetaryRandomWalkStreaming(context, worksheet, range, columnIndex, totalRows) {
+  // Nejdříve potřebujeme spočítat celkovou sumu pro výpočet intervalu
+  showNotification("Počítá se celková suma...");
+  let totalValue = 0;
+  let batchNum = 0;
+  
+  for await (const { values } of readRangeInBatches(context, worksheet, range, BATCH_SIZE)) {
+    batchNum++;
+    showNotification(`Počítá se suma - dávka ${batchNum}...`);
+    const startIdx = batchNum === 1 ? 1 : 0; // Skip header in first batch
+    
+    for (let i = startIdx; i < values.length; i++) {
+      const raw = values[i][columnIndex];
+      const parsed = parseNumberLoose(raw);
+      const value = parsed !== null ? parsed : 0;
+      totalValue += Math.abs(value);
+    }
+  }
+
   const sampleSize = calculateSampleSize(totalValue);
-  if (!sampleSize || sampleSize < 1) return [];
+  if (!sampleSize || sampleSize < 1) {
+    showNotification("Vypočtená velikost vzorku je neplatná.");
+    return [];
+  }
+
   const interval = totalValue / sampleSize;
   const sample = [];
   let currentSum = 0;
   const rng = getTask6Rng();
   let nextTarget = (typeof rng === 'function' ? rng() : Math.random()) * interval;
+  let globalRowIndex = 0; // Global row index (including header)
   
-  for (let i = 1; i < data.length; i++) {
-  const parsed = parseNumberLoose(data[i][columnIndex]);
-  const value = parsed !== null ? Math.abs(parsed) : 0;
-    currentSum += value;
+  showNotification(`Generuje se vzorek ${sampleSize} položek z celkové sumy ${totalValue.toLocaleString()}...`);
+  batchNum = 0;
+  
+  // Druhý průchod pro výběr vzorku
+  for await (const { values } of readRangeInBatches(context, worksheet, range, BATCH_SIZE)) {
+    batchNum++;
+    const startIdx = batchNum === 1 ? 1 : 0; // Skip header in first batch
     
-    if (currentSum >= nextTarget) {
-      sample.push({
-        rowIndex: i,
-        rowData: data[i],
-        value: data[i][columnIndex],
-        cumulativeValue: currentSum
-      });
-      nextTarget += interval;
+    showNotification(`Zpracování vzorku - dávka ${batchNum}/${Math.ceil(totalRows / BATCH_SIZE)}...`);
+    
+    for (let i = startIdx; i < values.length; i++) {
+      globalRowIndex++;
+      const raw = values[i][columnIndex];
+      const parsed = parseNumberLoose(raw);
+      const value = parsed !== null ? Math.abs(parsed) : 0;
+      currentSum += value;
+      
+      if (currentSum >= nextTarget && sample.length < sampleSize) {
+        sample.push({
+          rowIndex: globalRowIndex,
+          rowData: values[i],
+          value: raw,
+          cumulativeValue: currentSum
+        });
+        nextTarget += interval;
+      }
+      
+      // Early exit if we have enough samples
+      if (sample.length >= sampleSize) {
+        showNotification(`Vzorkování dokončeno - nalezeno ${sample.length} vzorků.`);
+        return sample;
+      }
     }
   }
   
-  return sample.slice(0, sampleSize);
+  return sample;
 }
 
-// Implementace náhodného generátoru čísel
-function generateRandomNumberSample(data, columnIndex) {
-  const totalValue = data.slice(1).reduce((sum, row) => {
-    const parsed = parseNumberLoose(row[columnIndex]);
-    const value = parsed !== null ? parsed : 0;
-    return sum + Math.abs(value);
-  }, 0);
-  const sampleSize = calculateSampleSize(totalValue);
-  const dataRows = data.slice(1); // Přeskočit hlavičku
-  const sample = [];
-  const usedIndices = new Set();
+// Optimalizovaná implementace náhodného generátoru čísel - streaming verze
+async function generateRandomNumberSampleStreaming(context, worksheet, range, columnIndex, totalRows) {
+  // Nejdříve potřebujeme spočítat celkovou sumu pro výpočet velikosti vzorku
+  showNotification("Počítá se celková suma...");
+  let totalValue = 0;
+  let batchNum = 0;
   
-  while (sample.length < sampleSize && sample.length < dataRows.length) {
-  const rng2 = getTask6Rng();
-  const randomIndex = Math.floor((typeof rng2 === 'function' ? rng2() : Math.random()) * dataRows.length);
+  for await (const { values } of readRangeInBatches(context, worksheet, range, BATCH_SIZE)) {
+    batchNum++;
+    showNotification(`Počítá se suma - dávka ${batchNum}...`);
+    const startIdx = batchNum === 1 ? 1 : 0; // Skip header in first batch
     
-    if (!usedIndices.has(randomIndex)) {
-      usedIndices.add(randomIndex);
-      sample.push({
-        rowIndex: randomIndex + 1, // +1 protože přeskakujeme hlavičku
-        rowData: dataRows[randomIndex],
-        value: dataRows[randomIndex][columnIndex]
-      });
+    for (let i = startIdx; i < values.length; i++) {
+      const raw = values[i][columnIndex];
+      const parsed = parseNumberLoose(raw);
+      const value = parsed !== null ? parsed : 0;
+      totalValue += Math.abs(value);
+    }
+  }
+
+  const sampleSize = calculateSampleSize(totalValue);
+  if (!sampleSize || sampleSize < 1) {
+    showNotification("Vypočtená velikost vzorku je neplatná.");
+    return [];
+  }
+
+  // Předem vybereme náhodné indexy řádků (0-based, bez hlavičky)
+  const selectedIndices = new Set();
+  const rng = getTask6Rng();
+  
+  while (selectedIndices.size < Math.min(sampleSize, totalRows)) {
+    const randomIndex = Math.floor((typeof rng === 'function' ? rng() : Math.random()) * totalRows);
+    selectedIndices.add(randomIndex);
+  }
+  
+  showNotification(`Generuje se vzorek ${selectedIndices.size} položek z ${totalRows.toLocaleString()} řádků...`);
+  
+  const sample = [];
+  let globalRowIndex = 0; // Global row index (0-based, excluding header)
+  batchNum = 0;
+  
+  // Průchod daty a výběr vzorku podle předem vybraných indexů
+  for await (const { values } of readRangeInBatches(context, worksheet, range, BATCH_SIZE)) {
+    batchNum++;
+    const startIdx = batchNum === 1 ? 1 : 0; // Skip header in first batch
+    
+    showNotification(`Zpracování vzorku - dávka ${batchNum}/${Math.ceil(totalRows / BATCH_SIZE)}...`);
+    
+    for (let i = startIdx; i < values.length; i++) {
+      if (selectedIndices.has(globalRowIndex)) {
+        sample.push({
+          rowIndex: globalRowIndex + 1, // +1 because we want 1-based indexing relative to header
+          rowData: values[i],
+          value: values[i][columnIndex]
+        });
+      }
+      globalRowIndex++;
+      
+      // Early exit if we have all samples
+      if (sample.length >= selectedIndices.size) {
+        showNotification(`Vzorkování dokončeno - nalezeno ${sample.length} vzorků.`);
+        return sample;
+      }
     }
   }
   
