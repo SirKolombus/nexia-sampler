@@ -1049,41 +1049,39 @@ function getColumnIndex(columnRef) {
  }
 
  // Helper to read rows in batches with improved memory management
-// Chunk loading: čtení dat po velkých kusech (10 000 řádků)
-const CHUNK_SIZE = 10000;
-async function* readRangeInBatches(context, worksheet, range, batchSize = BATCH_SIZE, chunkSize = CHUNK_SIZE) {
-  const totalRows = range.rowCount;
-  const startRow = range.rowIndex;
-  const startCol = range.columnIndex;
-  const colCount = range.columnCount;
-
-  // Memory warning for very large datasets
-  if (totalRows > 50000) {
-    showNotification(`Upozornění: Zpracovává se ${totalRows.toLocaleString()} řádků. Prosím čekejte...`);
-  }
-
-  for (let chunkOffset = 0; chunkOffset < totalRows; chunkOffset += chunkSize) {
-    const chunkRows = Math.min(chunkSize, totalRows - chunkOffset);
-    try {
-      const chunkRange = worksheet.getRangeByIndexes(startRow + chunkOffset, startCol, chunkRows, colCount);
-      chunkRange.load('values');
-      await context.sync();
-      // Dále rozděl chunk na batch dávky (pro zápis nebo další zpracování)
-      for (let batchOffset = 0; batchOffset < chunkRows; batchOffset += batchSize) {
-        const batchRows = Math.min(batchSize, chunkRows - batchOffset);
-        const batchValues = chunkRange.values.slice(batchOffset, batchOffset + batchRows);
-        yield { values: batchValues, startRow: startRow + chunkOffset + batchOffset };
-      }
-      // Pro velké datasety můžeš přidat malou pauzu
-      if (totalRows > 100000) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-    } catch (error) {
-      console.error(`Chyba při čtení chunku na pozici ${chunkOffset}:`, error);
-      throw new Error(`Chyba při čtení dat na řádku ${startRow + chunkOffset}: ${error.message}`);
-    }
-  }
-}
+ async function* readRangeInBatches(context, worksheet, range, batchSize = BATCH_SIZE) {
+   const totalRows = range.rowCount;
+   const startRow = range.rowIndex;
+   const startCol = range.columnIndex;
+   const colCount = range.columnCount;
+   
+   // Memory warning for very large datasets
+   if (totalRows > 50000) {
+     showNotification(`Upozornění: Zpracovává se ${totalRows.toLocaleString()} řádků. Prosím čekejte...`);
+   }
+   
+   for (let offset = 0; offset < totalRows; offset += batchSize) {
+     const rows = Math.min(batchSize, totalRows - offset);
+     
+     try {
+       const subRange = worksheet.getRangeByIndexes(startRow + offset, startCol, rows, colCount);
+       subRange.load('values');
+       await context.sync();
+       
+       yield { values: subRange.values, startRow: startRow + offset };
+       
+       // Force garbage collection hint for large datasets
+       if (totalRows > 100000 && offset % (batchSize * 10) === 0) {
+         showNotification(`Zpracováno ${Math.round((offset / totalRows) * 100)}% - ${(offset + rows).toLocaleString()}/${totalRows.toLocaleString()} řádků...`);
+         // Give browser a chance to garbage collect
+         await new Promise(resolve => setTimeout(resolve, 10));
+       }
+     } catch (error) {
+       console.error(`Chyba při čtení dávky na pozici ${offset}:`, error);
+       throw new Error(`Chyba při čtení dat na řádku ${startRow + offset}: ${error.message}`);
+     }
+   }
+ }
 
 
 // Optimalizovaná implementace náhodné peněžní procházky - streaming verze
