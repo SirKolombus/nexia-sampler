@@ -1,1 +1,339 @@
-<!doctype html><html><head><meta charset="UTF-8"/><meta http-equiv="X-UA-Compatible" content="IE=Edge"/><meta name="viewport" content="width=device-width,initial-scale=1"><title>Auditní vzorkovač</title><script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script><link rel="stylesheet" href="https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/office-ui-fabric-core/11.1.0/css/fabric.min.css"/><link href="9b5d5f4f1a617c087646.css" rel="stylesheet"/><script defer="defer" src="polyfill.js"></script><script defer="defer" src="taskpane.js"></script></head><body class="ms-font-m ms-welcome ms-Fabric"><section id="sideload-msg" class="ms-welcome__main"><h2 class="ms-font-xl">Please <a target="_blank" href="https://learn.microsoft.com/office/dev/add-ins/testing/test-debug-office-add-ins#sideload-an-office-add-in-for-testing">sideload</a> your add-in to see app body.</h2></section><main id="app-body" class="ms-welcome__main" style="display:none"><div style="text-align:center;margin-bottom:12px"><img src="assets/Head.png" alt="Auditní vzorkovač" title="Auditní vzorkovač" style="width:240px;height:160px;object-fit:cover;display:inline-block"/></div><div style="display:flex;justify-content:center;margin-bottom:12px"><button id="reset-sampler" class="ms-Button ms-Button--hero"><span class="ms-Button-label">Restartovat vzorkovač</span></button></div><div class="ms-Grid" style="margin-bottom:20px"><div class="ms-Grid-row"><div class="ms-Grid-col ms-sm12"><div class="ui-field-title">1. Metoda výběru vzorku</div><label class="ms-Label">Vyberte metodu výběru vzorku:</label> <select id="sampling-method" class="ms-Dropdown"><option value="">-Vyberte-</option><option value="monetary-random-walk">Náhodná peněžní procházka</option><option value="random-number-generator">Náhodný generátor čísel</option></select></div></div></div><div class="ms-Grid" style="margin-bottom:20px"><div class="ms-Grid-row"><div class="ms-Grid-col ms-sm12"><div class="ui-field-title">2. Faktor spolehlivosti</div><label class="ms-Label">Rozklikněte políčko "Nastavit" a definujte velikost faktoru spolehlivosti</label><div style="display:flex;align-items:center"><button id="set-reliability" class="ms-Button ms-Button--primary" style="margin-right:10px"><span class="ms-Button-label">Nastavit</span></button> <input id="reliability-factor" class="ms-TextField-field" readonly="readonly" placeholder="Klikněte pro nastavení" style="flex:1"></div></div></div></div><div class="ms-Grid" style="margin-bottom:20px"><div class="ms-Grid-row"><div class="ms-Grid-col ms-sm12"><div class="ui-field-title">3. Hladina Významnosti</div><label class="ms-Label">Rozklikněte políčko "Nastavit" a vyplňte okénka (3 části).</label><div style="display:flex;gap:8px;margin-top:8px;flex-direction:column"><button id="fill-significance" class="ms-Button ms-Button--primary" style="align-self:flex-start"><span class="ms-Button-label">Nastavit</span></button><div style="display:flex;flex-direction:column;gap:8px;width:100%"><input id="significance-type-display" class="ms-TextField-field" readonly="readonly" placeholder="Typ významnosti"> <input id="significance-value-display" class="ms-TextField-field" readonly="readonly" placeholder="Hodnota (bez deset.)"> <input id="significance-justification-display" class="ms-TextField-field" readonly="readonly" placeholder="Zdůvodnění / stav"></div></div></div></div></div><div class="ms-Grid" style="margin-bottom:20px"><div class="ms-Grid-row"><div class="ms-Grid-col ms-sm12"><div class="ui-field-title">4. Oblast dat pro výběr vzorku</div><label class="ms-Label">Označte plochu dat, z které se bude tvořit vzorek:</label><div style="display:flex;align-items:center"><button id="select-range" class="ms-Button ms-Button--primary" style="margin-right:10px"><span class="ms-Button-label">Vybrat</span></button> <input id="data-range" class="ms-TextField-field" readonly="readonly" placeholder="klikněte na 'Vybrat'" style="flex:1"></div><div style="height:8px"></div><label class="ms-Label">Označte sloupec obsahující hodnoty a klikněte na "Sloupec":</label><div style="display:flex;align-items:center;margin-top:6px"><button id="select-column" class="ms-Button ms-Button--primary" style="margin-right:10px"><span class="ms-Button-label">Sloupec</span></button> <input id="value-column" class="ms-TextField-field" readonly="readonly" placeholder="klikněte na 'Sloupec'" style="flex:1"></div><div style="height:8px"></div></div></div></div><div id="results" class="ms-Grid" style="margin-top:20px;display:none"><div class="ms-Grid-row"><div class="ms-Grid-col ms-sm12"><h3 class="ms-font-l">Výsledky vzorkování:</h3><div id="sample-info" class="ms-font-m"></div><div id="sample-list" style="margin-top:10px"></div></div></div></div><div class="ms-Grid" style="margin-bottom:20px"><div class="ms-Grid-row"><div class="ms-Grid-col ms-sm12"><div class="ui-field-title">5. Stanovení velikosti vzorku</div><label class="ms-Label">Stiskněte tlačítko pro spočítání součtu absolutních hodnot datového pole z úlohy 4.</label><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button id="task5-compute-sum" class="ms-Button ms-Button--primary" style="margin-right:10px"><span class="ms-Button-label">Spočítat sumu</span></button> <input id="task5-result-display" class="ms-TextField-field" readonly="readonly" placeholder="Výsledek (součet absolutních hodnot)" style="flex:1"></div><div style="height:8px"></div><label class="ms-Label">Stiskněte tlačítko pro vypočítání velikosti vzorku:</label><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button id="task5-calc-size" class="ms-Button ms-Button--primary" style="margin-right:10px"><span class="ms-Button-label">Velikost vzorku</span></button> <input id="task5-size-display" class="ms-TextField-field" readonly="readonly" placeholder="Velikost vzorku (n)" style="flex:1"></div><div style="height:12px"></div><div style="display:flex;align-items:center;gap:12px"><label class="ms-Label" style="margin:0">Chceme použít vypočtenou velikost vzorku?</label> <select id="task5-use-calculated" class="ms-Dropdown" style="width:160px"><option value="">-Vyberte-</option><option value="yes">Ano</option><option value="no">Ne</option></select></div><div id="task5-override-area" style="display:none;margin-top:8px;gap:8px"><div style="font-weight:600;margin-bottom:6px">Vyplňte žádanou velikost a zdůvodněte změnu</div><input id="task5-override-size" class="ms-TextField-field" placeholder="Žádaná velikost"> <input id="task5-override-reason" class="ms-TextField-field" placeholder="Důvod pro změnu"></div><div style="height:8px"></div><div style="display:flex;gap:8px;margin-top:8px"><button id="task5-confirm-size" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Potvrdit velikost vzorku</span></button><div id="task5-confirm-info" style="align-self:center;color:#666">&nbsp;</div></div></div></div></div><div class="ms-Grid" style="margin-bottom:20px"><div class="ms-Grid-row"><div class="ms-Grid-col ms-sm12"><div class="ui-field-title">6. Tvorba vzorku</div><label class="ms-Label">Zvolena metoda:</label> <input id="task6-method-display" class="ms-TextField-field" readonly="readonly" placeholder="Vybraná metoda" style="margin-bottom:8px"> <label class="ms-Label">Velikost vzorku:</label> <input id="task6-final-size-display" class="ms-TextField-field" readonly="readonly" placeholder="Potvrzená velikost vzorku"><div style="height:8px"></div><label class="ms-Label">Vyloučit hodnoty přesahující významnost?</label> <select id="task6-exclude-over-significance" class="ms-Dropdown" style="width:160px;margin-top:6px"><option value="">-Vyberte-</option><option value="yes">Ano</option><option value="no">Ne</option></select><div style="height:12px"></div><div style="display:flex;gap:8px;align-items:center"><button id="task6-compute-adjusted-sum" class="ms-Button ms-Button--primary" style="margin-right:10px"><span class="ms-Button-label">Spočítat upravenou sumu</span></button> <input id="task6-param-sum-display" class="ms-TextField-field" readonly="readonly" placeholder="Parametr sumy" style="flex:1"></div><div id="task6-count-area" style="display:none;margin-top:8px;gap:8px"><label class="ms-Label">Počet významných položek</label> <input id="task6-significant-count-display" class="ms-TextField-field" readonly="readonly" placeholder="Počet"></div><div style="height:8px"></div><label class="ms-Label">Seed pro reprodukovatelnost (volitelně)</label> <input id="task6-seed" class="ms-TextField-field" placeholder="volitelně: seed pro reprodukovatelnost" style="margin-top:6px"><div style="height:8px"></div><div style="display:flex;gap:8px"><button id="task6-generate-seed" class="ms-Button ms-Button--primary" style="padding:6px 8px">Generovat seed</button> <button id="task6-regenerate-seed" class="ms-Button" style="padding:6px 8px">Znovu generovat seed</button></div><div style="height:12px"></div><div style="display:flex;gap:8px"><button id="task6-generate-sample" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Vygenerovat výběr vzorku</span></button></div><div style="height:12px"></div><label class="ms-Label">Vytisknout parametry vzorkovače na:</label> <select id="task6-print-target" class="ms-Dropdown" style="width:220px;margin-top:6px"><option value="">-Vyberte-</option><option value="above">Nad tabulku</option><option value="new-sheet">Na nový list</option></select><div style="height:12px"></div><div style="display:flex;gap:8px"><button id="task6-generate-parameters" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Vygenerovat parametry vzorkovače</span></button></div></div></div></div><div id="reliability-modal" class="modal-overlay" style="display:none"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="reliability-modal-title"><h3 id="reliability-modal-title">Nastavení parametrů faktoru spolehlivosti</h3><div class="modal-row"><label for="reliability-control-risk">1. Kontrolní riziko</label> <select id="reliability-control-risk"><option value="">-Vyberte-</option><option value="Nízké">Nízké</option><option value="Střední">Střední</option><option value="Vysoké">Vysoké</option></select></div><div class="modal-row"><label for="reliability-inherent-risk">2. Přirozené riziko</label> <select id="reliability-inherent-risk"><option value="">-Vyberte-</option><option value="Nízké">Nízké</option><option value="Střední">Střední</option><option value="Vysoké">Vysoké</option></select></div><div class="modal-row"><label for="reliability-rmm-level">3. Hladina RMM</label> <select id="reliability-rmm-level"><option value="">-Vyberte-</option><option value="Nízké">Nízké</option><option value="Střední">Střední</option><option value="Vysoké">Vysoké</option></select></div><div class="modal-row"><label for="reliability-analytical-tests">4. Provádím analytické testy?</label> <select id="reliability-analytical-tests"><option value="">-Vyberte-</option><option value="Ano">Ano</option><option value="Ne">Ne</option></select></div><div class="modal-row"><label for="reliability-control-tests">5. Provádím testy kontrol?</label> <select id="reliability-control-tests"><option value="">-Vyberte-</option><option value="Ano">Ano</option><option value="Ne">Ne</option></select></div><div style="display:flex;gap:8px;margin-top:12px"><button id="modal-save-btn" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Uložit</span></button> <button id="modal-reset-btn" class="ms-Button"><span class="ms-Button-label">Resetovat</span></button> <button id="modal-cancel-btn" class="ms-Button"><span class="ms-Button-label">Zrušit</span></button></div></div></div><div id="significance-modal" class="modal-overlay" style="display:none"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="significance-modal-title"><h3 id="significance-modal-title">Hladina Významnosti</h3><div class="modal-row"><label for="significance-type">1. O jakou významnost se jedná?</label> <select id="significance-type"><option value="">-Vyberte-</option><option value="Prováděcí">Prováděcí</option><option value="Specifická">Specifická</option><option value="Jiná">Jiná</option></select></div><div class="modal-row"><label for="significance-value">2. Prosím vyplňte hladinu významnosti (bez desetin):</label> <input id="significance-value" placeholder="např. 5000 nebo 5 % (bude normalizováno)"/></div><div class="modal-row"><label for="significance-justification">3. Zdůvodněte použití jiné významnosti než prováděcí</label> <textarea id="significance-justification" rows="3" placeholder="Důvod (pokud je typ 'Prováděcí', bude zobrazeno 'NEVYPLŇOVAT')"></textarea></div><div style="display:flex;gap:8px;margin-top:12px"><button id="significance-save-btn" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Uložit</span></button> <button id="significance-reset-btn" class="ms-Button"><span class="ms-Button-label">Resetovat</span></button> <button id="significance-cancel-btn" class="ms-Button"><span class="ms-Button-label">Zrušit</span></button></div></div></div><div id="notification" class="notification" style="display:none"></div><div style="text-align:center;margin-top:12px;color:#666;font-style:italic;font-size:12px">Author: Tomáš Pavlovič - developed using GPT-5</div></main></body></html>
+<!-- Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. -->
+<!-- This file shows how to design a first-run page that provides a welcome screen to the user about the features of the add-in. -->
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Auditní vzorkovač</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <!-- For more information on Fluent UI, visit https://developer.microsoft.com/fluentui#/. -->
+    <link rel="stylesheet" href="https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/office-ui-fabric-core/11.1.0/css/fabric.min.css"/>
+
+    <!-- Template styles -->
+    <link href="taskpane.css" rel="stylesheet" type="text/css" />
+</head>
+
+<body class="ms-font-m ms-welcome ms-Fabric">
+    <section id="sideload-msg" class="ms-welcome__main">
+        <h2 class="ms-font-xl">Please <a target="_blank" href="https://learn.microsoft.com/office/dev/add-ins/testing/test-debug-office-add-ins#sideload-an-office-add-in-for-testing">sideload</a> your add-in to see app body.</h2>
+    </section>
+    <main id="app-body" class="ms-welcome__main" style="display: none;">
+        <div style="text-align:center; margin-bottom:12px;">
+            <img src="../../assets/Head.png" alt="Auditní vzorkovač" title="Auditní vzorkovač" style="width:240px;height:160px;object-fit:cover;display:inline-block;" />
+        </div>
+
+        <div style="display:flex; justify-content:center; margin-bottom:12px;">
+            <button id="reset-sampler" class="ms-Button ms-Button--hero">
+                <span class="ms-Button-label">Restartovat vzorkovač</span>
+            </button>
+        </div>
+
+        
+
+        <!-- 1. Metoda výběru vzorku -->
+        <div class="ms-Grid" style="margin-bottom: 20px;">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <div class="ui-field-title">1. Metoda výběru vzorku</div>
+                    <label class="ms-Label">Vyberte metodu výběru vzorku:</label>
+                    <select id="sampling-method" class="ms-Dropdown">
+                        <option value="">-Vyberte-</option>
+                        <option value="monetary-random-walk">Náhodná peněžní procházka</option>
+                        <option value="random-number-generator">Náhodný generátor čísel</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Faktor spolehlivosti -->
+        <div class="ms-Grid" style="margin-bottom: 20px;">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <div class="ui-field-title">2. Faktor spolehlivosti</div>
+                    <label class="ms-Label">Rozklikněte políčko "Nastavit" a definujte velikost faktoru spolehlivosti</label>
+                    <div style="display: flex; align-items: center;">
+                        <button id="set-reliability" class="ms-Button ms-Button--primary" style="margin-right: 10px;">
+                            <span class="ms-Button-label">Nastavit</span>
+                        </button>
+                        <input type="text" id="reliability-factor" class="ms-TextField-field" readonly placeholder="Klikněte pro nastavení" style="flex: 1;">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Hladina Významnosti (přesunuto sem) -->
+        <div class="ms-Grid" style="margin-bottom: 20px;">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <div class="ui-field-title">3. Hladina Významnosti</div>
+                    <label class="ms-Label">Rozklikněte políčko "Nastavit" a vyplňte okénka (3 části).</label>
+                    <div style="display: flex; gap:8px; margin-top:8px; flex-direction: column;">
+                        <button id="fill-significance" class="ms-Button ms-Button--primary" style="align-self: flex-start;">
+                            <span class="ms-Button-label">Nastavit</span>
+                        </button>
+                        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+                            <input type="text" id="significance-type-display" class="ms-TextField-field" readonly placeholder="Typ významnosti">
+                            <input type="text" id="significance-value-display" class="ms-TextField-field" readonly placeholder="Hodnota (bez deset.)">
+                            <input type="text" id="significance-justification-display" class="ms-TextField-field" readonly placeholder="Zdůvodnění / stav">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+            </div>
+        </div>
+
+        
+        <!-- 3. Oblast dat + sloupec s hodnotami -->
+        <div class="ms-Grid" style="margin-bottom: 20px;">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <div class="ui-field-title">4. Oblast dat pro výběr vzorku</div>
+                    <label class="ms-Label">Označte plochu dat, z které se bude tvořit vzorek. Vyznačené sloupce nesmí překročit šířku 30 sloupců, tj. hranice vzorku je A:AD.</label>
+                    <div style="display: flex; align-items: center;">
+                            <button id="select-range" class="ms-Button ms-Button--primary" style="margin-right: 10px;">
+                                <span class="ms-Button-label">Vybrat</span>
+                            </button>
+                            <input type="text" id="data-range" class="ms-TextField-field" readonly placeholder="klikněte na 'Vybrat'" style="flex: 1;">
+                    </div>
+
+                    <div style="height:8px"></div>
+
+                    <label class="ms-Label">Označte sloupec obsahující hodnoty a klikněte na "Sloupec":</label>
+                    <div style="display: flex; align-items: center; margin-top:6px;">
+                        <button id="select-column" class="ms-Button ms-Button--primary" style="margin-right: 10px;">
+                            <span class="ms-Button-label">Sloupec</span>
+                        </button>
+                        <input type="text" id="value-column" class="ms-TextField-field" readonly placeholder="klikněte na 'Sloupec'" style="flex: 1;">
+                    </div>
+
+                    <div style="height:8px"></div>
+                    
+                </div>
+            </div>
+        </div>
+
+        
+
+        
+        
+        <!-- Výsledky -->
+        <div id="results" class="ms-Grid" style="margin-top: 20px; display: none;">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <h3 class="ms-font-l">Výsledky vzorkování:</h3>
+                    <div id="sample-info" class="ms-font-m"></div>
+                    <div id="sample-list" style="margin-top: 10px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Stanovení velikosti vzorku (samostatný blok, pod Task 4) -->
+        <div class="ms-Grid" style="margin-bottom: 20px;">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <div class="ui-field-title">5. Stanovení velikosti vzorku</div>
+                    <label class="ms-Label">Stiskněte tlačítko pro spočítání součtu absolutních hodnot datového pole z úlohy 4.</label>
+                    <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                        <button id="task5-compute-sum" class="ms-Button ms-Button--primary" style="margin-right:10px;">
+                            <span class="ms-Button-label">Spočítat sumu</span>
+                        </button>
+                        <input type="text" id="task5-result-display" class="ms-TextField-field" readonly placeholder="Výsledek (součet absolutních hodnot)" style="flex: 1;">
+                    </div>
+                    <div style="height:8px"></div>
+                    <label class="ms-Label">Stiskněte tlačítko pro vypočítání velikosti vzorku:</label>
+                    <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                        <button id="task5-calc-size" class="ms-Button ms-Button--primary" style="margin-right:10px;">
+                            <span class="ms-Button-label">Velikost vzorku</span>
+                        </button>
+                        <input type="text" id="task5-size-display" class="ms-TextField-field" readonly placeholder="Velikost vzorku (n)" style="flex: 1;">
+                    </div>
+                    <div style="height:12px"></div>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <label class="ms-Label" style="margin:0;">Chceme použít vypočtenou velikost vzorku?</label>
+                        <select id="task5-use-calculated" class="ms-Dropdown" style="width:160px;">
+                            <option value="">-Vyberte-</option>
+                            <option value="yes">Ano</option>
+                            <option value="no">Ne</option>
+                        </select>
+                    </div>
+                    <div id="task5-override-area" style="display:none; margin-top:8px; gap:8px;">
+                        <div style="font-weight:600; margin-bottom:6px;">Vyplňte žádanou velikost a zdůvodněte změnu</div>
+                        <input type="text" id="task5-override-size" class="ms-TextField-field" placeholder="Žádaná velikost">
+                        <input type="text" id="task5-override-reason" class="ms-TextField-field" placeholder="Důvod pro změnu">
+                    </div>
+                    <div style="height:8px"></div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button id="task5-confirm-size" class="ms-Button ms-Button--primary">
+                            <span class="ms-Button-label">Potvrdit velikost vzorku</span>
+                        </button>
+                        <div id="task5-confirm-info" style="align-self:center;color:#666;">&nbsp;</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 6. Tvorba vzorku -->
+        <div class="ms-Grid" style="margin-bottom: 20px;">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <div class="ui-field-title">6. Tvorba vzorku</div>
+                    <label class="ms-Label">Zvolena metoda:</label>
+                    <input type="text" id="task6-method-display" class="ms-TextField-field" readonly placeholder="Vybraná metoda" style="margin-bottom:8px;">
+                    <label class="ms-Label">Velikost vzorku:</label>
+                    <input type="text" id="task6-final-size-display" class="ms-TextField-field" readonly placeholder="Potvrzená velikost vzorku">
+                    <div style="height:8px"></div>
+                    <!-- Option: exclude values exceeding materiality (significance) -->
+                    <label class="ms-Label">Vyloučit hodnoty přesahující významnost?</label>
+                    <select id="task6-exclude-over-significance" class="ms-Dropdown" style="width:160px; margin-top:6px;">
+                        <option value="">-Vyberte-</option>
+                        <option value="yes">Ano</option>
+                        <option value="no">Ne</option>
+                    </select>
+                    <div style="height:12px"></div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button id="task6-compute-adjusted-sum" class="ms-Button ms-Button--primary" style="margin-right:10px;">
+                            <span class="ms-Button-label">Spočítat upravenou sumu</span>
+                        </button>
+                        <input type="text" id="task6-param-sum-display" class="ms-TextField-field" readonly placeholder="Parametr sumy" style="flex:1;">
+                    </div>
+                    <div id="task6-count-area" style="display:none; margin-top:8px; gap:8px;">
+                        <label class="ms-Label">Počet významných položek</label>
+                        <input type="text" id="task6-significant-count-display" class="ms-TextField-field" readonly placeholder="Počet">
+                    </div>
+                    <div style="height:8px"></div>
+                    <label class="ms-Label">Seed pro reprodukovatelnost (volitelně)</label>
+                    <input type="text" id="task6-seed" class="ms-TextField-field" placeholder="volitelně: seed pro reprodukovatelnost" style="margin-top:6px;">
+                                        <div style="height:8px"></div>
+                                        <div style="display:flex; gap:8px;">
+                                            <button id="task6-generate-seed" class="ms-Button ms-Button--primary" style="padding:6px 8px;">Generovat seed</button>
+                                            <button id="task6-regenerate-seed" class="ms-Button" style="padding:6px 8px;">Znovu generovat seed</button>
+                                        </div>
+                    <div style="height:12px"></div>
+                    <div style="display:flex; gap:8px;">
+                        <button id="task6-generate-sample" class="ms-Button ms-Button--primary">
+                            <span class="ms-Button-label">Vygenerovat výběr vzorku</span>
+                        </button>
+                    </div>
+                    <div style="height:12px"></div>
+                    <label class="ms-Label">Vytisknout parametry vzorkovače na:</label>
+                    <select id="task6-print-target" class="ms-Dropdown" style="width:220px; margin-top:6px;">
+                        <option value="">-Vyberte-</option>
+                        <option value="above">Nad tabulku</option>
+                        <option value="new-sheet">Na nový list</option>
+                    </select>
+                    <div style="height:12px"></div>
+                    <div style="display:flex; gap:8px;">
+                        <button id="task6-generate-parameters" class="ms-Button ms-Button--primary">
+                            <span class="ms-Button-label">Vygenerovat parametry vzorkovače</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+                <!-- Modal pro nastavení parametrů úlohy -->
+                <div id="reliability-modal" class="modal-overlay" style="display: none;">
+                        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reliability-modal-title">
+                                <h3 id="reliability-modal-title">Nastavení parametrů faktoru spolehlivosti</h3>
+
+                                                <div class="modal-row">
+                                                    <label for="reliability-control-risk">1. Kontrolní riziko</label>
+                                                    <select id="reliability-control-risk">
+                                                        <option value="">-Vyberte-</option>
+                                                        <option value="Nízké">Nízké</option>
+                                                        <option value="Střední">Střední</option>
+                                                        <option value="Vysoké">Vysoké</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="modal-row">
+                                                    <label for="reliability-inherent-risk">2. Přirozené riziko</label>
+                                                    <select id="reliability-inherent-risk">
+                                                        <option value="">-Vyberte-</option>
+                                                        <option value="Nízké">Nízké</option>
+                                                        <option value="Střední">Střední</option>
+                                                        <option value="Vysoké">Vysoké</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="modal-row">
+                                                    <label for="reliability-rmm-level">3. Hladina RMM</label>
+                                                    <select id="reliability-rmm-level">
+                                                        <option value="">-Vyberte-</option>
+                                                        <option value="Nízké">Nízké</option>
+                                                        <option value="Střední">Střední</option>
+                                                        <option value="Vysoké">Vysoké</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="modal-row">
+                                                    <label for="reliability-analytical-tests">4. Provádím analytické testy?</label>
+                                                    <select id="reliability-analytical-tests">
+                                                        <option value="">-Vyberte-</option>
+                                                        <option value="Ano">Ano</option>
+                                                        <option value="Ne">Ne</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="modal-row">
+                                                    <label for="reliability-control-tests">5. Provádím testy kontrol?</label>
+                                                    <select id="reliability-control-tests">
+                                                        <option value="">-Vyberte-</option>
+                                                        <option value="Ano">Ano</option>
+                                                        <option value="Ne">Ne</option>
+                                                    </select>
+                                                </div>
+
+                                <div style="display:flex; gap:8px; margin-top:12px;">
+                                    <button id="modal-save-btn" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Uložit</span></button>
+                                    <button id="modal-reset-btn" class="ms-Button"><span class="ms-Button-label">Resetovat</span></button>
+                                    <button id="modal-cancel-btn" class="ms-Button"><span class="ms-Button-label">Zrušit</span></button>
+                                </div>
+                        </div>
+                </div>
+
+                        <!-- Modal pro zadání hladiny významnosti -->
+                        <div id="significance-modal" class="modal-overlay" style="display: none;">
+                            <div class="modal" role="dialog" aria-modal="true" aria-labelledby="significance-modal-title">
+                                <h3 id="significance-modal-title">Hladina Významnosti</h3>
+                                <div class="modal-row">
+                                    <label for="significance-type">1. O jakou významnost se jedná?</label>
+                                    <select id="significance-type">
+                                        <option value="">-Vyberte-</option>
+                                        <option value="Prováděcí">Prováděcí</option>
+                                        <option value="Specifická">Specifická</option>
+                                        <option value="Jiná">Jiná</option>
+                                    </select>
+                                </div>
+
+                                <div class="modal-row">
+                                    <label for="significance-value">2. Prosím vyplňte hladinu významnosti (bez desetin):</label>
+                                    <input id="significance-value" type="text" placeholder="např. 5000 nebo 5 % (bude normalizováno)" />
+                                </div>
+
+                                <div class="modal-row">
+                                    <label for="significance-justification">3. Zdůvodněte použití jiné významnosti než prováděcí</label>
+                                    <textarea id="significance-justification" rows="3" placeholder="Důvod (pokud je typ 'Prováděcí', bude zobrazeno 'NEVYPLŇOVAT')"></textarea>
+                                </div>
+
+                                <div style="display:flex; gap:8px; margin-top:12px;">
+                                    <button id="significance-save-btn" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Uložit</span></button>
+                                    <button id="significance-reset-btn" class="ms-Button"><span class="ms-Button-label">Resetovat</span></button>
+                                    <button id="significance-cancel-btn" class="ms-Button"><span class="ms-Button-label">Zrušit</span></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notifikace místo alert() -->
+        <div id="notification" class="notification" style="display:none;"></div>
+        <div style="text-align:center; margin-top:12px; color: #666; font-style: italic; font-size: 12px;">Author: Tomáš Pavlovič - developed using GPT-5</div>
+    </main>
+</body>
+
+</html>
