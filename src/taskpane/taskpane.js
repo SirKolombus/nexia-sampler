@@ -25,11 +25,11 @@ let task6Seed = null;
 // Import FS_PARAMETRY (in-code mapping of combinations to numeric factor)
 import fsParams from './FS_Parametry';
 
-// Optimalized batch size for large datasets
-const BATCH_SIZE = 1500; // Further reduced for Excel API limits
+// Optimalized batch size for large datasets - very conservative for Excel API limits
+const BATCH_SIZE = 1000; // Reading batch size
 const LARGE_DATASET_THRESHOLD = 50000; // Warn user for datasets larger than this
 const MEMORY_CRITICAL_THRESHOLD = 200000; // Extra precautions for very large datasets
-const OUTPUT_BATCH_SIZE = 800; // Smaller batches for output operations
+const OUTPUT_BATCH_SIZE = 200; // Much smaller batches for output operations to avoid API limits
 
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
@@ -545,7 +545,9 @@ async function generateMonetaryRandomWalkTask6() {
       await context.sync();
       
       // Write data in batches to avoid Excel limits
-      const dataBatchSize = OUTPUT_BATCH_SIZE; // Use output-optimized batch size
+      const dataBatchSize = totalRows > 100000 ? 100 : OUTPUT_BATCH_SIZE; // Ultra-small batches for huge datasets
+      showNotification(`Zapisují se výsledky po ${dataBatchSize} řádcích...`);
+      
       for (let batchStart = 1; batchStart < out.length; batchStart += dataBatchSize) {
         const batchEnd = Math.min(batchStart + dataBatchSize, out.length);
         const batchData = out.slice(batchStart, batchEnd);
@@ -557,6 +559,11 @@ async function generateMonetaryRandomWalkTask6() {
         );
         batchRange.values = batchData;
         await context.sync();
+        
+        // Add small delay for very large datasets to prevent API overload
+        if (totalRows > 100000) {
+          await new Promise(resolve => setTimeout(resolve, 50)); // 50ms pause
+        }
         
         // Show progress for large datasets
         if (out.length > 10000) {
@@ -1012,8 +1019,11 @@ function getColumnIndex(columnRef) {
 }
  // Helper to write rows in batches with improved memory management for output
  async function writeRangeInBatches(context, worksheet, startRowIdx, startColIdx, rows, batchSize = OUTPUT_BATCH_SIZE) {
-   for (let offset = 0; offset < rows.length; offset += batchSize) {
-     const batchRows = rows.slice(offset, offset + batchSize);
+   // Use even smaller batches for very large datasets
+   const adaptiveBatchSize = rows.length > 50000 ? 100 : batchSize;
+   
+   for (let offset = 0; offset < rows.length; offset += adaptiveBatchSize) {
+     const batchRows = rows.slice(offset, offset + adaptiveBatchSize);
      const batchRowCount = batchRows.length;
      
      try {
@@ -1021,8 +1031,13 @@ function getColumnIndex(columnRef) {
        writeRange.values = batchRows;
        await context.sync();
        
+       // Add delay for large datasets to prevent API throttling
+       if (rows.length > 50000) {
+         await new Promise(resolve => setTimeout(resolve, 30)); // 30ms pause
+       }
+       
        // Progress for large output operations
-       if (rows.length > 5000 && offset % (batchSize * 5) === 0) {
+       if (rows.length > 5000 && offset % (adaptiveBatchSize * 5) === 0) {
          const progress = Math.round(((offset + batchRowCount) / rows.length) * 100);
          showNotification(`Zapisuje se ${progress}% výsledků...`);
        }
