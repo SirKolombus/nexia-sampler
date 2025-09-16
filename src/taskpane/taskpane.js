@@ -26,9 +26,10 @@ let task6Seed = null;
 import fsParams from './FS_Parametry';
 
 // Optimalized batch size for large datasets
-const BATCH_SIZE = 2000; // Reduced from 5000 for better memory management
+const BATCH_SIZE = 1500; // Further reduced for Excel API limits
 const LARGE_DATASET_THRESHOLD = 50000; // Warn user for datasets larger than this
 const MEMORY_CRITICAL_THRESHOLD = 200000; // Extra precautions for very large datasets
+const OUTPUT_BATCH_SIZE = 800; // Smaller batches for output operations
 
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
@@ -369,7 +370,7 @@ async function generateRandomNumberGeneratorTask6() {
           outputRows.push([order, selection]);
         }
         const writeStartRow = range.rowIndex + (isFirstBatch ? 1 : (batchStartRow - range.rowIndex));
-        await writeRangeInBatches(context, worksheet, writeStartRow, writeColIndex, outputRows, BATCH_SIZE);
+        await writeRangeInBatches(context, worksheet, writeStartRow, writeColIndex, outputRows);
       }
 
       await context.sync();
@@ -533,14 +534,36 @@ async function generateMonetaryRandomWalkTask6() {
         out[i] = [absVal, cumulative, idxVal, selections[i], reasons[i]];
       }
 
-      // write out to worksheet to the right of range
+      // write out to worksheet to the right of range using batch processing
       const writeRowCount = rowCount;
       const writeColIndex = range.columnIndex + range.columnCount;
-      const writeRange = worksheet.getRangeByIndexes(range.rowIndex, writeColIndex, writeRowCount, newCols);
-      writeRange.values = out;
-      // basic formatting: make header bold
+      
+      // Write header first
       const headerRange = worksheet.getRangeByIndexes(range.rowIndex, writeColIndex, 1, newCols);
+      headerRange.values = [out[0]]; // Header row
       headerRange.format.font.bold = true;
+      await context.sync();
+      
+      // Write data in batches to avoid Excel limits
+      const dataBatchSize = OUTPUT_BATCH_SIZE; // Use output-optimized batch size
+      for (let batchStart = 1; batchStart < out.length; batchStart += dataBatchSize) {
+        const batchEnd = Math.min(batchStart + dataBatchSize, out.length);
+        const batchData = out.slice(batchStart, batchEnd);
+        const batchRange = worksheet.getRangeByIndexes(
+          range.rowIndex + batchStart, 
+          writeColIndex, 
+          batchData.length, 
+          newCols
+        );
+        batchRange.values = batchData;
+        await context.sync();
+        
+        // Show progress for large datasets
+        if (out.length > 10000) {
+          const progress = Math.round((batchEnd / out.length) * 100);
+          showNotification(`Zapisuje se výstup: ${progress}% (${batchEnd}/${out.length} řádků)`);
+        }
+      }
 
       await context.sync();
 
@@ -987,14 +1010,26 @@ function getColumnIndex(columnRef) {
   }
   return result - 1;
 }
- // Helper to write rows in batches (default batch size = BATCH_SIZE)
- async function writeRangeInBatches(context, worksheet, startRowIdx, startColIdx, rows, batchSize = BATCH_SIZE) {
+ // Helper to write rows in batches with improved memory management for output
+ async function writeRangeInBatches(context, worksheet, startRowIdx, startColIdx, rows, batchSize = OUTPUT_BATCH_SIZE) {
    for (let offset = 0; offset < rows.length; offset += batchSize) {
      const batchRows = rows.slice(offset, offset + batchSize);
      const batchRowCount = batchRows.length;
-     const writeRange = worksheet.getRangeByIndexes(startRowIdx + offset, startColIdx, batchRowCount, batchRows[0].length);
-     writeRange.values = batchRows;
-     await context.sync();
+     
+     try {
+       const writeRange = worksheet.getRangeByIndexes(startRowIdx + offset, startColIdx, batchRowCount, batchRows[0].length);
+       writeRange.values = batchRows;
+       await context.sync();
+       
+       // Progress for large output operations
+       if (rows.length > 5000 && offset % (batchSize * 5) === 0) {
+         const progress = Math.round(((offset + batchRowCount) / rows.length) * 100);
+         showNotification(`Zapisuje se ${progress}% výsledků...`);
+       }
+     } catch (error) {
+       console.error(`Chyba při zápisu dávky na pozici ${offset}:`, error);
+       throw new Error(`Chyba při zápisu výsledků na řádku ${startRowIdx + offset}: ${error.message}`);
+     }
    }
  }
 
