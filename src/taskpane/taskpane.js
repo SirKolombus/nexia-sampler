@@ -1892,36 +1892,57 @@ async function printParameters(params, target) {
   try {
     await Excel.run(async (context) => {
       const formatted = _format_params(params);
+      let worksheet, startRow = 0, startCol = 0;
+      
       if (target === 'new-sheet') {
         const newSheet = context.workbook.worksheets.add("ParametryVzorku");
         newSheet.activate();
-        const range = newSheet.getRange('A1');
-        range.worksheet.getRangeByIndexes(0, 0, formatted.length, 2).values = formatted;
+        worksheet = newSheet;
+        startRow = 0;
+        startCol = 0;
       } else if (target === 'above') {
         const dataRange = document.getElementById('data-range').value;
         if (!dataRange) {
           showNotification('Oblast dat není vybrána. Parametry budou vloženy na nový list.');
-          const newSheet = context.workbook.worksheets.add();
+          const newSheet = context.workbook.worksheets.add("ParametryVzorku");
           newSheet.activate();
-          const range = newSheet.getRange('A1');
-          range.worksheet.getRangeByIndexes(0, 0, formatted.length, 2).values = formatted;
-          return;
+          worksheet = newSheet;
+          startRow = 0;
+          startCol = 0;
+        } else {
+          let addr = dataRange;
+          if (addr.indexOf('!') !== -1) addr = addr.split('!').pop();
+          addr = addr.replace(/\$/g, '').trim();
+          const range = context.workbook.worksheets.getActiveWorksheet().getRange(addr);
+          range.load(['rowIndex']);
+          await context.sync();
+          startRow = range.rowIndex;
+          startCol = 0;
+          worksheet = context.workbook.worksheets.getActiveWorksheet();
+          const usedRange = worksheet.getUsedRange();
+          usedRange.load('columnCount');
+          await context.sync();
+          const columnCount = usedRange.columnCount;
+          worksheet.getRangeByIndexes(startRow, 0, formatted.length, columnCount).insert(Excel.InsertShiftDirection.down);
         }
-        let addr = dataRange;
-        if (addr.indexOf('!') !== -1) addr = addr.split('!').pop();
-        addr = addr.replace(/\$/g, '').trim();
-        const range = context.workbook.worksheets.getActiveWorksheet().getRange(addr);
-        range.load(['rowIndex']);
-        await context.sync();
-        const startRow = range.rowIndex;
-        const sheet = context.workbook.worksheets.getActiveWorksheet();
-        const usedRange = sheet.getUsedRange();
-        usedRange.load('columnCount');
-        await context.sync();
-        const columnCount = usedRange.columnCount;
-        sheet.getRangeByIndexes(startRow, 0, formatted.length, columnCount).insert(Excel.InsertShiftDirection.down);
-        sheet.getRangeByIndexes(startRow, 0, formatted.length, 2).values = formatted;
       }
+      
+      // Write the data
+      const dataRange = worksheet.getRangeByIndexes(startRow, startCol, formatted.length, 2);
+      dataRange.values = formatted;
+      
+      // Find and format the "Autor vzorku" row with "Neznámý uživatel"
+      for (let i = 0; i < formatted.length; i++) {
+        if (formatted[i][0] === 'Autor vzorku' && formatted[i][1] === 'Neznámý uživatel') {
+          const authorCell = worksheet.getRangeByIndexes(startRow + i, startCol + 1, 1, 1);
+          // Make it bold and yellow background
+          authorCell.format.font.bold = true;
+          authorCell.format.fill.color = '#FFFF00'; // Yellow background
+          authorCell.format.font.color = '#000000'; // Black text for readability
+          break;
+        }
+      }
+      
       await context.sync();
     });
   } catch (e) {
